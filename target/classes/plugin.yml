@@ -1,0 +1,27 @@
+name: Herbio
+version: '1.0.0'
+main: dev.herbio.HerbioPlugin
+api-version: '26.2'
+folia-supported: true
+author: Herbio
+description: Herb growing minigame with a virtual 6x6 garden.
+
+libraries:
+  - com.zaxxer:HikariCP:6.2.1
+  - com.mysql:mysql-connector-j:9.1.0
+
+commands:
+  herb:
+    description: Herbio main command.
+    usage: "/herb gui | /herb give <fert|herb|seed> <green|blue|purple|dark> [amount] | /herb give scroll <player> | /herb set <player> <level>"
+
+permissions:
+  herbio.gui:
+    description: Allows opening the Herbio garden GUI.
+    default: true
+  herbio.admin:
+    description: Allows using /herb give.
+    default: op
+  herbio.vip:
+    description: Allows the bulk plant/harvest hoe.
+    default: op

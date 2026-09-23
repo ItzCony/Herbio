@@ -1,0 +1,110 @@
+# Herbio configuration. All text supports MiniMessage tags.
+
+database:
+  # true  -> profiles are stored in MySQL using the settings below
+  # false -> profiles are stored in plugins/Herbio/players/<uuid>.yml, MySQL is never contacted
+  enabled: false
+  host: localhost
+  port: 3306
+  database: herbio
+  username: root
+  password: ""
+  pool-size: 8
+  # Extra JDBC properties appended to the connection URL.
+  properties:
+    useSSL: "false"
+    allowPublicKeyRetrieval: "true"
+    characterEncoding: "utf8"
+  # How often cached profiles are flushed to storage, in seconds.
+  autosave-interval: 300
+
+gui:
+  # <herb> is replaced with the herb type the player currently has selected.
+  title: "<dark_green>Herbio <dark_gray>| <white><herb>"
+  # Title of the herb picker opened by a gardening permit.
+  scroll-title: "<dark_green>Gardening permit"
+  # How often an open GUI re-renders, in ticks.
+  refresh-ticks: 20
+
+# Time a seed needs to become harvestable, in seconds, per herb type.
+growth-seconds:
+  green: 300
+  blue: 900
+  purple: 1800
+  dark: 3600
+
+# Herb items produced by one harvest.
+harvest-yield:
+  green: 1
+  blue: 1
+  purple: 2
+  dark: 3
+
+# Experience granted by one harvest.
+xp-reward:
+  green: 5
+  blue: 12
+  purple: 30
+  dark: 75
+
+fertilizer:
+  # Percentage of the remaining growth time removed by one fertilizer.
+  reduction-percent: 50
+  # How many fertilizers one plot accepts before the herb is harvested (0 disables fertilizing).
+  max-per-plot: 4
+
+vip:
+  # Growth time cut for players with the herbio.vip permission, in percent.
+  growth-reduction-percent: 50
+
+level:
+  # Ranks are 0..10, M1..M10, G1..G10, P (32 ranks, index 0..31).
+  # Experience needed for level N = base * growth^N (N = 0 for the first level up).
+  # With the values below: 0->1 = 100, 10->M1 = 931, 20->G1 = 8674, 30->P = 80779,
+  # roughly 403 000 XP in total for the full ladder.
+  base-xp: 100
+  growth: 1.25
+
+messages:
+  prefix: "<dark_green>Herbio <dark_gray>» <gray>"
+  players-only: "<red>This command can only be used by a player."
+  no-permission: "<red>You do not have permission to do that."
+  # Sent as one message; every line after the first carries no prefix.
+  usage: |-
+    <white>Herbio commands<gray>:
+    <dark_gray> » <white>/herb gui
+    <dark_gray>   <gray>Opens your herb garden.
+    <dark_gray> » <white>/herb give <kind> <herb> [amount]
+      <gray>fert <yellow>|<gray> herb <yellow>|<gray> seed <yellow>»<gray> green <yellow>|<gray> blue <yellow>|<gray> purple <yellow>|<gray> dark
+    <dark_gray> » <white>/herb give scroll <player>
+    <dark_gray>   <gray>Gives a gardening permit.
+    <dark_gray> » <white>/herb set <player> <level>
+    <dark_gray>   <gray>Sets a herbalism rank <yellow>»<gray> 0<yellow>-<gray>10 <yellow>|<gray> M1<yellow>-<gray>M10 <yellow>|<gray> G1<yellow>-<gray>G10 <yellow>|<gray> P
+  unknown-herb: "<red>Unknown herb type '<input>'. Use green, blue, purple or dark."
+  unknown-item: "<red>Unknown item type '<input>'. Use fert, herb, seed or scroll."
+  player-not-found: "<red>Player '<input>' is not online."
+  invalid-level: "<red>Unknown rank '<input>'. Use 0-10, M1-M10, G1-G10 or P."
+  level-set: "<gray>Set <white><player><gray> to herbalism rank <white><level><gray>."
+  level-set-target: "<gray>Your herbalism rank was set to <white><level><gray>."
+  scroll-given: "<gray>Gave a gardening permit to <white><player><gray>."
+  scroll-received: "<gray>You received a <gold>gardening permit<gray>. Right click it to use it."
+  scroll-missing: "<red>You are no longer holding a gardening permit."
+  scroll-used: "<gray>The permit harvested <white><amount><gray> <herb> <gray>plot(s) for <white><xp><gray> XP."
+  invalid-amount: "<red>Amount must be a number between 1 and <max>."
+  given: "<gray>Received <white><amount>x <herb> <kind><gray>."
+  profile-loading: "<red>Your garden is still loading, try again in a moment."
+  herb-locked: "<red><herb> needs herbalism level <white><level><red>."
+  plot-occupied: "<red>That plot is already planted."
+  plot-not-ready: "<red>That herb is not ready yet."
+  no-seeds: "<red>You have no <herb> seeds."
+  no-fertilizer: "<red>You have no <herb> fertilizer."
+  fertilizer-limit: "<red>This plot cannot be fertilized any more."
+  nothing-to-plant: "<red>There is nothing to plant."
+  nothing-to-harvest: "<red>There is nothing to harvest."
+  nothing-to-fertilize: "<red>There is nothing to fertilize."
+  planted: "<gray>Planted <white><amount><gray> seed(s)."
+  harvested: "<gray>Harvested <white><amount><gray> herb(s) for <white><xp><gray> XP."
+  fertilized: "<gray>Fertilized <white><amount><gray> plot(s)."
+  selected: "<gray>Selected <white><herb><gray>."
+  level-up: "<green>Herbalism level up! <white><level>"
+  max-level: "<gold>You reached the highest herbalism rank."

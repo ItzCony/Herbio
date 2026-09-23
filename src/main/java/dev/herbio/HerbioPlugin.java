@@ -1,0 +1,91 @@
+package dev.herbio;
+
+import dev.herbio.command.HerbCommand;
+import dev.herbio.config.HerbioConfig;
+import dev.herbio.config.Messages;
+import dev.herbio.garden.GardenService;
+import dev.herbio.gui.GuiManager;
+import dev.herbio.gui.HerbGuiListener;
+import dev.herbio.gui.ScrollUseListener;
+import dev.herbio.herb.HerbItems;
+import dev.herbio.player.PlayerManager;
+import dev.herbio.player.PlayerSessionListener;
+import dev.herbio.storage.Database;
+import dev.herbio.storage.MySqlPlayerRepository;
+import dev.herbio.storage.PlayerRepository;
+import dev.herbio.storage.YamlPlayerRepository;
+import org.bukkit.command.PluginCommand;
+import org.bukkit.entity.Player;
+import org.bukkit.plugin.java.JavaPlugin;
+
+import java.io.File;
+import java.sql.SQLException;
+import java.util.logging.Level;
+
+/** Wires the plugin together; every subsystem is constructed here and nowhere else. */
+public final class HerbioPlugin extends JavaPlugin {
+
+    private Database database;
+    private PlayerManager players;
+    private GuiManager guis;
+
+    @Override
+    public void onEnable() {
+        saveDefaultConfig();
+        HerbioConfig config = HerbioConfig.load(getConfig());
+        Messages messages = Messages.load(getConfig());
+
+        PlayerRepository repository;
+        if (config.databaseEnabled()) {
+            try {
+                this.database = new Database(config.database());
+                database.createSchema();
+            } catch (SQLException | RuntimeException failure) {
+                getLogger().log(Level.SEVERE, "Could not connect to MySQL, disabling Herbio.", failure);
+                getServer().getPluginManager().disablePlugin(this);
+                return;
+            }
+            repository = new MySqlPlayerRepository(database);
+        } else {
+            repository = new YamlPlayerRepository(new File(getDataFolder(), "players"));
+            getLogger().info("MySQL is disabled; profiles are stored in plugins/Herbio/players.");
+        }
+
+        HerbItems items = new HerbItems(this);
+        this.players = new PlayerManager(this, config, repository);
+        GardenService gardens = new GardenService(config, items);
+        this.guis = new GuiManager(this, config, messages, players, gardens, items);
+
+        getServer().getPluginManager().registerEvents(new PlayerSessionListener(players), this);
+        getServer().getPluginManager().registerEvents(new HerbGuiListener(guis), this);
+        getServer().getPluginManager().registerEvents(new ScrollUseListener(guis, items), this);
+
+        PluginCommand command = getCommand("herb");
+        if (command != null) {
+            HerbCommand executor = new HerbCommand(this, messages, guis, items, players);
+            command.setExecutor(executor);
+            command.setTabCompleter(executor);
+        }
+
+        players.startAutosave();
+        guis.startRefreshTask();
+
+        // Covers /reload and plugin managers: players are already online at this point.
+        for (Player online : getServer().getOnlinePlayers()) {
+            players.load(online.getUniqueId());
+        }
+    }
+
+    @Override
+    public void onDisable() {
+        if (guis != null) {
+            guis.shutdown();
+        }
+        if (players != null) {
+            players.shutdown();
+        }
+        if (database != null) {
+            database.close();
+        }
+    }
+}
