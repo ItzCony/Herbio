@@ -1,9 +1,13 @@
 # Herbio configuration. All text supports MiniMessage tags.
 
+# Where profiles are stored:
+#   mysql  -> the database section below
+#   sqlite -> plugins/Herbio/herbio.db (single file, no server needed)
+#   yaml   -> plugins/Herbio/players/<uuid>.yml (one file per player)
+storage: yaml
+
+# Used by "storage: mysql" only.
 database:
-  # true  -> profiles are stored in MySQL using the settings below
-  # false -> profiles are stored in plugins/Herbio/players/<uuid>.yml, MySQL is never contacted
-  enabled: false
   host: localhost
   port: 3306
   database: herbio

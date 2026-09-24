@@ -9,7 +9,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 
 /** Owns the MySQL connection pool and creates the schema on startup. */
-public final class Database implements AutoCloseable {
+public final class Database implements SqlDatabase {
 
     private static final String CREATE_PLAYERS = """
             CREATE TABLE IF NOT EXISTS herbio_players (
@@ -35,6 +35,13 @@ public final class Database implements AutoCloseable {
             ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4
             """;
 
+    private static final String UPSERT_PLAYER = """
+            INSERT INTO herbio_players (uuid, level_index, xp, selected_herb)
+            VALUES (?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE level_index = VALUES(level_index), xp = VALUES(xp),
+                                    selected_herb = VALUES(selected_herb)
+            """;
+
     private final HikariDataSource dataSource;
 
     public Database(DatabaseSettings settings) {
@@ -51,16 +58,23 @@ public final class Database implements AutoCloseable {
         this.dataSource = new HikariDataSource(hikari);
     }
 
+    @Override
     public Connection connection() throws SQLException {
         return dataSource.getConnection();
     }
 
+    @Override
     public void createSchema() throws SQLException {
         try (Connection connection = connection(); Statement statement = connection.createStatement()) {
             statement.executeUpdate(CREATE_PLAYERS);
             statement.executeUpdate(CREATE_PLOTS);
             addFertilizedColumn(statement);
         }
+    }
+
+    @Override
+    public String upsertPlayerSql() {
+        return UPSERT_PLAYER;
     }
 
     /** Upgrades tables created before the fertilizer limit existed; already there = nothing to do. */
