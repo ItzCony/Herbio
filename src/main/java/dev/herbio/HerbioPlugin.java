@@ -11,8 +11,11 @@ import dev.herbio.herb.HerbItems;
 import dev.herbio.player.PlayerManager;
 import dev.herbio.player.PlayerSessionListener;
 import dev.herbio.storage.Database;
-import dev.herbio.storage.MySqlPlayerRepository;
 import dev.herbio.storage.PlayerRepository;
+import dev.herbio.storage.SqlDatabase;
+import dev.herbio.storage.SqlPlayerRepository;
+import dev.herbio.storage.SqliteDatabase;
+import dev.herbio.storage.StorageType;
 import dev.herbio.storage.YamlPlayerRepository;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.entity.Player;
@@ -25,7 +28,7 @@ import java.util.logging.Level;
 /** Wires the plugin together; every subsystem is constructed here and nowhere else. */
 public final class HerbioPlugin extends JavaPlugin {
 
-    private Database database;
+    private SqlDatabase database;
     private PlayerManager players;
     private GuiManager guis;
 
@@ -36,19 +39,26 @@ public final class HerbioPlugin extends JavaPlugin {
         Messages messages = Messages.load(getConfig());
 
         PlayerRepository repository;
-        if (config.databaseEnabled()) {
-            try {
-                this.database = new Database(config.database());
-                database.createSchema();
-            } catch (SQLException | RuntimeException failure) {
-                getLogger().log(Level.SEVERE, "Could not connect to MySQL, disabling Herbio.", failure);
-                getServer().getPluginManager().disablePlugin(this);
-                return;
+        switch (config.storageType()) {
+            case MYSQL, SQLITE -> {
+                try {
+                    this.database = config.storageType() == StorageType.MYSQL
+                            ? new Database(config.database())
+                            : new SqliteDatabase(new File(getDataFolder(), "herbio.db"));
+                    database.createSchema();
+                } catch (SQLException | RuntimeException failure) {
+                    getLogger().log(Level.SEVERE, "Could not open the " + config.storageType()
+                            + " storage, disabling Herbio.", failure);
+                    getServer().getPluginManager().disablePlugin(this);
+                    return;
+                }
+                repository = new SqlPlayerRepository(database);
             }
-            repository = new MySqlPlayerRepository(database);
-        } else {
-            repository = new YamlPlayerRepository(new File(getDataFolder(), "players"));
-            getLogger().info("MySQL is disabled; profiles are stored in plugins/Herbio/players.");
+            case YAML -> {
+                repository = new YamlPlayerRepository(new File(getDataFolder(), "players"));
+                getLogger().info("Profiles are stored in plugins/Herbio/players.");
+            }
+            default -> throw new IllegalStateException("Unknown storage type");
         }
 
         HerbItems items = new HerbItems(this);

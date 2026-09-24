@@ -1,6 +1,7 @@
 package dev.herbio.config;
 
 import dev.herbio.herb.HerbType;
+import dev.herbio.storage.StorageType;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 
@@ -11,7 +12,7 @@ import java.util.concurrent.TimeUnit;
 /** Immutable snapshot of config.yml. Reloading the plugin builds a new instance. */
 public final class HerbioConfig {
 
-    private final boolean databaseEnabled;
+    private final StorageType storageType;
     private final DatabaseSettings database;
     private final long autosaveIntervalSeconds;
     private final String guiTitle;
@@ -27,7 +28,8 @@ public final class HerbioConfig {
     private final double xpGrowth;
 
     private HerbioConfig(FileConfiguration configuration) {
-        this.databaseEnabled = configuration.getBoolean("database.enabled", false);
+        this.storageType = StorageType.byId(configuration.getString("storage",
+                configuration.getBoolean("database.enabled", false) ? "mysql" : "yaml"));
         this.database = DatabaseSettings.load(requireSection(configuration, "database"));
         this.autosaveIntervalSeconds = Math.max(30L, configuration.getLong("database.autosave-interval", 300L));
         this.guiTitle = configuration.getString("gui.title", "<dark_green>Herbio <dark_gray>| <white><herb>");
@@ -66,9 +68,8 @@ public final class HerbioConfig {
         return Map.copyOf(values);
     }
 
-    /** {@code true} keeps profiles in MySQL, {@code false} in local YAML files. */
-    public boolean databaseEnabled() {
-        return databaseEnabled;
+    public StorageType storageType() {
+        return storageType;
     }
 
     public DatabaseSettings database() {

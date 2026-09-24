@@ -13,27 +13,23 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-/** Blocking MySQL access for {@link ProfileSnapshot}; always called from an async thread. */
-public final class MySqlPlayerRepository implements PlayerRepository {
+/** Blocking JDBC access for {@link ProfileSnapshot}; always called from an async thread. */
+public final class SqlPlayerRepository implements PlayerRepository {
 
     private static final String SELECT_PLAYER =
             "SELECT level_index, xp, selected_herb FROM herbio_players WHERE uuid = ?";
     private static final String SELECT_PLOTS =
             "SELECT plot_index, herb, ready_at, fertilized FROM herbio_plots WHERE uuid = ?";
-    private static final String UPSERT_PLAYER = """
-            INSERT INTO herbio_players (uuid, level_index, xp, selected_herb)
-            VALUES (?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE level_index = VALUES(level_index), xp = VALUES(xp),
-                                    selected_herb = VALUES(selected_herb)
-            """;
     private static final String DELETE_PLOTS = "DELETE FROM herbio_plots WHERE uuid = ?";
     private static final String INSERT_PLOT =
             "INSERT INTO herbio_plots (uuid, plot_index, herb, ready_at, fertilized) VALUES (?, ?, ?, ?, ?)";
 
-    private final Database database;
+    private final SqlDatabase database;
+    private final String upsertPlayer;
 
-    public MySqlPlayerRepository(Database database) {
+    public SqlPlayerRepository(SqlDatabase database) {
         this.database = database;
+        this.upsertPlayer = database.upsertPlayerSql();
     }
 
     @Override
@@ -78,7 +74,7 @@ public final class MySqlPlayerRepository implements PlayerRepository {
             boolean autoCommit = connection.getAutoCommit();
             connection.setAutoCommit(false);
             try {
-                try (PreparedStatement statement = connection.prepareStatement(UPSERT_PLAYER)) {
+                try (PreparedStatement statement = connection.prepareStatement(upsertPlayer)) {
                     statement.setString(1, snapshot.uuid().toString());
                     statement.setInt(2, snapshot.levelIndex());
                     statement.setLong(3, snapshot.xp());
