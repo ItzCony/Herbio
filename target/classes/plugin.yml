@@ -3,6 +3,7 @@ version: '1.0.0'
 main: dev.herbio.HerbioPlugin
 api-version: '26.2'
 folia-supported: true
+softdepend: [Vault, CMI]
 author: Herbio
 description: Herb growing minigame with a virtual 6x6 garden.
 

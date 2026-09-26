@@ -25,6 +25,8 @@ database:
 gui:
   # <herb> is replaced with the herb type the player currently has selected.
   title: "<dark_green>Herbio <dark_gray>| <white><herb>"
+  # Title of the buy prompt for locked dark field plots.
+  confirm-title: "<dark_red>Unlock plot"
   # Title of the herb picker opened by a gardening permit.
   scroll-title: "<dark_green>Gardening permit"
   # How often an open GUI re-renders, in ticks.
@@ -50,6 +52,19 @@ xp-reward:
   blue: 12
   purple: 30
   dark: 75
+
+# Green, blue and purple fields: when a field opens, its last plots are still closed and one more
+# opens with every rank above the one that unlocked the field (blue at M1 -> 10 closed, M2 -> 9,
+# ..., G1 -> none). Green is the starter field and is always fully open.
+progressive:
+  locked-plots: 10
+
+# The dark herb field only: its last plots have to be bought with Vault money (CMI counts).
+dark-field:
+  # How many of the 36 plots start locked, counted from the end.
+  locked-plots: 20
+  # Price for unlocking one plot.
+  price: 50000
 
 fertilizer:
   # Percentage of the remaining growth time removed by one fertilizer.
@@ -103,12 +118,16 @@ messages:
   no-seeds: "<red>You have no <herb> seeds."
   no-fertilizer: "<red>You have no <herb> fertilizer."
   fertilizer-limit: "<red>This plot cannot be fertilized any more."
+  plot-locked: "<red>That plot is still locked."
+  plot-rank-locked: "<red>This plot opens at herbalism rank <white><level><red>."
+  plot-bought: "<gray>Unlocked dark plot <white>#<index><gray> for <white><price><gray>."
+  not-enough-money: "<red>You need <white><price><red> to unlock this plot."
+  economy-missing: "<red>No economy plugin is available, plots cannot be bought."
   nothing-to-plant: "<red>There is nothing to plant."
   nothing-to-harvest: "<red>There is nothing to harvest."
   nothing-to-fertilize: "<red>There is nothing to fertilize."
   planted: "<gray>Planted <white><amount><gray> seed(s)."
   harvested: "<gray>Harvested <white><amount><gray> herb(s) for <white><xp><gray> XP."
   fertilized: "<gray>Fertilized <white><amount><gray> plot(s)."
-  selected: "<gray>Selected <white><herb><gray>."
   level-up: "<green>Herbalism level up! <white><level>"
   max-level: "<gold>You reached the highest herbalism rank."

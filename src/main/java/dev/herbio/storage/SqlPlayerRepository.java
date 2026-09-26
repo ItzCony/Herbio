@@ -17,7 +17,7 @@ import java.util.UUID;
 public final class SqlPlayerRepository implements PlayerRepository {
 
     private static final String SELECT_PLAYER =
-            "SELECT level_index, xp, selected_herb FROM herbio_players WHERE uuid = ?";
+            "SELECT level_index, xp, selected_herb, dark_unlocked FROM herbio_players WHERE uuid = ?";
     private static final String SELECT_PLOTS =
             "SELECT plot_index, herb, ready_at, fertilized FROM herbio_plots WHERE uuid = ?";
     private static final String DELETE_PLOTS = "DELETE FROM herbio_plots WHERE uuid = ?";
@@ -37,6 +37,7 @@ public final class SqlPlayerRepository implements PlayerRepository {
         try (Connection connection = database.connection()) {
             int levelIndex;
             long xp;
+            long darkUnlocked;
             HerbType selected;
             try (PreparedStatement statement = connection.prepareStatement(SELECT_PLAYER)) {
                 statement.setString(1, uuid.toString());
@@ -46,6 +47,7 @@ public final class SqlPlayerRepository implements PlayerRepository {
                     }
                     levelIndex = result.getInt("level_index");
                     xp = result.getLong("xp");
+                    darkUnlocked = result.getLong("dark_unlocked");
                     selected = HerbType.byIdOrDefault(result.getString("selected_herb"), HerbType.GREEN);
                 }
             }
@@ -62,7 +64,7 @@ public final class SqlPlayerRepository implements PlayerRepository {
                     }
                 }
             }
-            return new ProfileSnapshot(uuid, levelIndex, xp, selected, List.copyOf(plots));
+            return new ProfileSnapshot(uuid, levelIndex, xp, selected, darkUnlocked, List.copyOf(plots));
         } catch (SQLException failure) {
             throw new StorageException("Could not read profile " + uuid, failure);
         }
@@ -79,6 +81,7 @@ public final class SqlPlayerRepository implements PlayerRepository {
                     statement.setInt(2, snapshot.levelIndex());
                     statement.setLong(3, snapshot.xp());
                     statement.setString(4, snapshot.selectedHerb().name());
+                    statement.setLong(5, snapshot.darkUnlockedPlots());
                     statement.executeUpdate();
                 }
                 try (PreparedStatement statement = connection.prepareStatement(DELETE_PLOTS)) {

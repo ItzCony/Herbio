@@ -16,7 +16,8 @@ public final class SqliteDatabase implements SqlDatabase {
                 uuid TEXT NOT NULL PRIMARY KEY,
                 level_index INTEGER NOT NULL DEFAULT 0,
                 xp INTEGER NOT NULL DEFAULT 0,
-                selected_herb TEXT NOT NULL DEFAULT 'GREEN'
+                selected_herb TEXT NOT NULL DEFAULT 'GREEN',
+                dark_unlocked INTEGER NOT NULL DEFAULT 0
             )
             """;
 
@@ -27,15 +28,16 @@ public final class SqliteDatabase implements SqlDatabase {
                 herb TEXT NOT NULL,
                 ready_at INTEGER NOT NULL,
                 fertilized INTEGER NOT NULL DEFAULT 0,
-                PRIMARY KEY (uuid, plot_index)
+                PRIMARY KEY (uuid, herb, plot_index)
             )
             """;
 
     private static final String UPSERT_PLAYER = """
-            INSERT INTO herbio_players (uuid, level_index, xp, selected_herb)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO herbio_players (uuid, level_index, xp, selected_herb, dark_unlocked)
+            VALUES (?, ?, ?, ?, ?)
             ON CONFLICT(uuid) DO UPDATE SET level_index = excluded.level_index, xp = excluded.xp,
-                                            selected_herb = excluded.selected_herb
+                                            selected_herb = excluded.selected_herb,
+                                            dark_unlocked = excluded.dark_unlocked
             """;
 
     private final HikariDataSource dataSource;
@@ -66,6 +68,11 @@ public final class SqliteDatabase implements SqlDatabase {
             statement.execute("PRAGMA journal_mode = WAL");
             statement.executeUpdate(CREATE_PLAYERS);
             statement.executeUpdate(CREATE_PLOTS);
+            try {
+                statement.executeUpdate("ALTER TABLE herbio_players ADD COLUMN dark_unlocked INTEGER NOT NULL DEFAULT 0");
+            } catch (SQLException ignored) {
+                // Column already present.
+            }
         }
     }
 

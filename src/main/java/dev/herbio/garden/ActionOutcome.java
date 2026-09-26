@@ -12,7 +12,8 @@ public enum ActionOutcome {
     HERB_LOCKED("herb-locked"),
     NO_SEEDS("no-seeds"),
     NO_FERTILIZER("no-fertilizer"),
-    FERTILIZER_LIMIT("fertilizer-limit");
+    FERTILIZER_LIMIT("fertilizer-limit"),
+    PLOT_LOCKED("plot-locked");
 
     private final @Nullable String messageKey;
 

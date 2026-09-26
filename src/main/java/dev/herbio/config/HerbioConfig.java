@@ -17,6 +17,10 @@ public final class HerbioConfig {
     private final long autosaveIntervalSeconds;
     private final String guiTitle;
     private final String scrollTitle;
+    private final String confirmTitle;
+    private final int progressiveLockedPlots;
+    private final int darkLockedPlots;
+    private final double darkPlotPrice;
     private final long guiRefreshTicks;
     private final Map<HerbType, Long> growthMillis;
     private final Map<HerbType, Integer> harvestYield;
@@ -34,6 +38,10 @@ public final class HerbioConfig {
         this.autosaveIntervalSeconds = Math.max(30L, configuration.getLong("database.autosave-interval", 300L));
         this.guiTitle = configuration.getString("gui.title", "<dark_green>Herbio <dark_gray>| <white><herb>");
         this.scrollTitle = configuration.getString("gui.scroll-title", "<dark_green>Gardening permit");
+        this.confirmTitle = configuration.getString("gui.confirm-title", "<dark_red>Unlock plot");
+        this.progressiveLockedPlots = Math.max(0, Math.min(36, configuration.getInt("progressive.locked-plots", 10)));
+        this.darkLockedPlots = Math.max(0, Math.min(36, configuration.getInt("dark-field.locked-plots", 20)));
+        this.darkPlotPrice = Math.max(0.0D, configuration.getDouble("dark-field.price", 50000.0D));
         this.guiRefreshTicks = Math.max(1L, configuration.getLong("gui.refresh-ticks", 20L));
         this.growthMillis = readPerHerb(configuration, "growth-seconds", 300L, seconds -> TimeUnit.SECONDS.toMillis(Math.max(1L, seconds)));
         this.harvestYield = readPerHerb(configuration, "harvest-yield", 1L, value -> (int) Math.max(1L, value));
@@ -86,6 +94,24 @@ public final class HerbioConfig {
 
     public String scrollTitle() {
         return scrollTitle;
+    }
+
+    public String confirmTitle() {
+        return confirmTitle;
+    }
+
+    /** How many plots a green, blue or purple field starts with locked when it opens. */
+    public int progressiveLockedPlots() {
+        return progressiveLockedPlots;
+    }
+
+    /** How many plots at the end of the dark field start locked. */
+    public int darkLockedPlots() {
+        return darkLockedPlots;
+    }
+
+    public double darkPlotPrice() {
+        return darkPlotPrice;
     }
 
     public long guiRefreshTicks() {

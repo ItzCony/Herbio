@@ -10,7 +10,7 @@ public enum HerbItemKind {
     HERB("herb", "Herb", Material.FERN),
     FERTILIZER("fert", "Fertilizer", Material.BONE_MEAL),
     /** Herb-less: one permit works for every herb the player has unlocked. */
-    SCROLL("scroll", "Gardening Permit", Material.PAPER);
+    SCROLL("scroll", "Gardening Permit", Material.BORDURE_INDENTED_BANNER_PATTERN);
 
     private final String id;
     private final String displayName;

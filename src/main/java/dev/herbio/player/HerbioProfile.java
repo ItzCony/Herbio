@@ -1,32 +1,42 @@
 package dev.herbio.player;
 
 import dev.herbio.garden.Garden;
+import dev.herbio.garden.PlotState;
 import dev.herbio.herb.HerbType;
 import dev.herbio.herb.LevelScale;
 
+import java.util.ArrayList;
+import java.util.EnumMap;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
-/** Per player herbalism progress plus their garden. */
+/** Per player herbalism progress plus one garden per herb type. */
 public final class HerbioProfile {
 
     private final UUID uuid;
-    private final Garden garden = new Garden();
+    private final Map<HerbType, Garden> gardens = new EnumMap<>(HerbType.class);
 
     private volatile int levelIndex;
     private volatile long xp;
     private volatile HerbType selectedHerb = HerbType.GREEN;
+    private volatile long darkUnlockedPlots;
     private volatile boolean dirty;
 
     public HerbioProfile(UUID uuid) {
         this.uuid = uuid;
+        for (HerbType herb : HerbType.values()) {
+            gardens.put(herb, new Garden());
+        }
     }
 
     public UUID uuid() {
         return uuid;
     }
 
-    public Garden garden() {
-        return garden;
+    /** Each herb type owns its own 6x6 field. */
+    public Garden garden(HerbType field) {
+        return gardens.get(field);
     }
 
     public int levelIndex() {
@@ -55,6 +65,20 @@ public final class HerbioProfile {
 
     public void markClean() {
         this.dirty = false;
+    }
+
+    /** @return {@code true} when this dark field plot has already been bought */
+    public boolean isDarkPlotBought(int plotIndex) {
+        return (darkUnlockedPlots & (1L << plotIndex)) != 0L;
+    }
+
+    public void buyDarkPlot(int plotIndex) {
+        this.darkUnlockedPlots |= 1L << plotIndex;
+        markDirty();
+    }
+
+    public long darkUnlockedPlots() {
+        return darkUnlockedPlots;
     }
 
     /** Admin override: jumps to a rank and clears the progress into the next one. */
@@ -105,14 +129,26 @@ public final class HerbioProfile {
     }
 
     public synchronized ProfileSnapshot snapshot() {
-        return new ProfileSnapshot(uuid, levelIndex, xp, selectedHerb, garden.snapshot());
+        List<PlotState> plots = new ArrayList<>();
+        for (Garden garden : gardens.values()) {
+            plots.addAll(garden.snapshot());
+        }
+        return new ProfileSnapshot(uuid, levelIndex, xp, selectedHerb, darkUnlockedPlots, List.copyOf(plots));
     }
 
     public synchronized void apply(ProfileSnapshot snapshot) {
         this.levelIndex = LevelScale.clamp(snapshot.levelIndex());
         this.xp = Math.max(0L, snapshot.xp());
         this.selectedHerb = snapshot.selectedHerb();
-        this.garden.restore(snapshot.plots());
+        this.darkUnlockedPlots = snapshot.darkUnlockedPlots();
+        Map<HerbType, List<PlotState>> byField = new EnumMap<>(HerbType.class);
+        for (HerbType herb : HerbType.values()) {
+            byField.put(herb, new ArrayList<>());
+        }
+        for (PlotState state : snapshot.plots()) {
+            byField.get(state.herb()).add(state);
+        }
+        gardens.forEach((field, garden) -> garden.restore(byField.get(field)));
         markClean();
     }
 }

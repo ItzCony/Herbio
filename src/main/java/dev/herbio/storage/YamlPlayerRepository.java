@@ -30,14 +30,20 @@ public final class YamlPlayerRepository implements PlayerRepository {
         }
         YamlConfiguration yaml = YamlConfiguration.loadConfiguration(file);
         List<PlotState> plots = new ArrayList<>();
-        ConfigurationSection section = yaml.getConfigurationSection("plots");
-        if (section != null) {
-            for (String key : section.getKeys(false)) {
-                int index = plotIndex(key);
-                HerbType herb = HerbType.byIdOrDefault(section.getString(key + ".herb"), null);
-                if (index >= 0 && herb != null) {
-                    plots.add(new PlotState(index, herb, section.getLong(key + ".ready-at"),
-                            section.getInt(key + ".fertilized")));
+        ConfigurationSection fields = yaml.getConfigurationSection("plots");
+        if (fields != null) {
+            for (String fieldKey : fields.getKeys(false)) {
+                HerbType field = HerbType.byIdOrDefault(fieldKey, null);
+                ConfigurationSection section = fields.getConfigurationSection(fieldKey);
+                if (field == null || section == null) {
+                    continue;
+                }
+                for (String key : section.getKeys(false)) {
+                    int index = plotIndex(key);
+                    if (index >= 0) {
+                        plots.add(new PlotState(index, field, section.getLong(key + ".ready-at"),
+                                section.getInt(key + ".fertilized")));
+                    }
                 }
             }
         }
@@ -45,6 +51,7 @@ public final class YamlPlayerRepository implements PlayerRepository {
                 yaml.getInt("level-index"),
                 yaml.getLong("xp"),
                 HerbType.byIdOrDefault(yaml.getString("selected-herb"), HerbType.GREEN),
+                yaml.getLong("dark-unlocked"),
                 List.copyOf(plots));
     }
 
@@ -54,10 +61,11 @@ public final class YamlPlayerRepository implements PlayerRepository {
         yaml.set("level-index", snapshot.levelIndex());
         yaml.set("xp", snapshot.xp());
         yaml.set("selected-herb", snapshot.selectedHerb().name());
+        yaml.set("dark-unlocked", snapshot.darkUnlockedPlots());
         for (PlotState plot : snapshot.plots()) {
-            yaml.set("plots." + plot.index() + ".herb", plot.herb().name());
-            yaml.set("plots." + plot.index() + ".ready-at", plot.readyAtMillis());
-            yaml.set("plots." + plot.index() + ".fertilized", plot.fertilizerUses());
+            String path = "plots." + plot.herb().name() + "." + plot.index();
+            yaml.set(path + ".ready-at", plot.readyAtMillis());
+            yaml.set(path + ".fertilized", plot.fertilizerUses());
         }
         try {
             if (!directory.isDirectory() && !directory.mkdirs()) {
