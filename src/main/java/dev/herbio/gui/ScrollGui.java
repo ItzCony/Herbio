@@ -75,7 +75,7 @@ public final class ScrollGui implements InventoryHolder {
     private int planted(HerbType herb) {
         int count = 0;
         for (int index = 0; index < Garden.SIZE; index++) {
-            if (profile.garden().plot(index).herb() == herb) {
+            if (!profile.garden(herb).plot(index).isEmpty()) {
                 count++;
             }
         }

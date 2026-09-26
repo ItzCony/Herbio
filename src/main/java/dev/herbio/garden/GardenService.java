@@ -10,8 +10,9 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
 
 /**
- * All planting, harvesting and fertilizing rules: game rules, item costs and the VIP growth
- * bonus. Access permissions (who may open what) stay in the GUI layer.
+ * All planting, harvesting and fertilizing rules: game rules, item costs, plot locks and the
+ * VIP growth bonus. Every action works on the field of the herb the player currently has picked.
+ * Access permissions (who may open what) stay in the GUI layer.
  */
 public final class GardenService {
 
@@ -23,14 +24,48 @@ public final class GardenService {
         this.items = items;
     }
 
+    /**
+     * Dark field plots are bought with money, every other field opens its last plots rank by rank.
+     */
+    public boolean isPlotUnlocked(HerbioProfile profile, HerbType field, int plotIndex) {
+        if (field == HerbType.DARK) {
+            return plotIndex < Garden.SIZE - config.darkLockedPlots() || profile.isDarkPlotBought(plotIndex);
+        }
+        return plotIndex < Garden.SIZE - rankLockedPlots(field, profile.levelIndex());
+    }
+
+    /**
+     * Plots still closed by rank. A field starts with {@code progressive.locked-plots} closed and
+     * opens one more with every rank above the one that unlocked the field, so the field is full
+     * once the player leaves that tier.
+     *
+     * <p>Green is the starter field and always full; dark has no rank above {@code P} and is
+     * money-gated instead.</p>
+     */
+    public int rankLockedPlots(HerbType field, int levelIndex) {
+        if (field == HerbType.GREEN || field == HerbType.DARK) {
+            return 0;
+        }
+        int ranksAboveUnlock = Math.max(0, levelIndex - field.minLevelIndex());
+        return Math.max(0, config.progressiveLockedPlots() - ranksAboveUnlock);
+    }
+
+    /** Rank at which a rank-locked plot opens; only meaningful for green, blue and purple. */
+    public int rankUnlockLevelIndex(HerbType field, int plotIndex) {
+        return field.minLevelIndex() + config.progressiveLockedPlots() - (Garden.SIZE - 1 - plotIndex);
+    }
+
     public GardenResult plant(Player player, HerbioProfile profile, int plotIndex) {
         HerbType herb = profile.selectedHerb();
-        Plot plot = profile.garden().plot(plotIndex);
+        Plot plot = profile.garden(herb).plot(plotIndex);
         if (!plot.isEmpty()) {
             return GardenResult.failure(ActionOutcome.PLOT_OCCUPIED);
         }
         if (!herb.isUnlockedAt(profile.levelIndex())) {
             return GardenResult.failure(ActionOutcome.HERB_LOCKED);
+        }
+        if (!isPlotUnlocked(profile, herb, plotIndex)) {
+            return GardenResult.failure(ActionOutcome.PLOT_LOCKED);
         }
         if (items.remove(player.getInventory(), HerbItemKind.SEED, herb, 1) < 1) {
             return GardenResult.failure(ActionOutcome.NO_SEEDS);
@@ -41,7 +76,7 @@ public final class GardenService {
     }
 
     public GardenResult harvest(Player player, HerbioProfile profile, int plotIndex) {
-        Plot plot = profile.garden().plot(plotIndex);
+        Plot plot = profile.garden(profile.selectedHerb()).plot(plotIndex);
         if (plot.isEmpty()) {
             return GardenResult.failure(ActionOutcome.PLOT_EMPTY);
         }
@@ -56,16 +91,17 @@ public final class GardenService {
         return new GardenResult(ActionOutcome.SUCCESS, 1, xp, levels);
     }
 
-    /** Gardening permit: matures and harvests every plot holding {@code herb}. */
-    public GardenResult harvestInstant(Player player, HerbioProfile profile, HerbType herb) {
+    /** Gardening permit: matures and harvests every plot of one field. */
+    public GardenResult harvestInstant(Player player, HerbioProfile profile, HerbType field) {
+        Garden garden = profile.garden(field);
         int harvested = 0;
         long xp = 0L;
         for (int index = 0; index < Garden.SIZE; index++) {
-            Plot plot = profile.garden().plot(index);
-            if (plot.herb() != herb) {
+            Plot plot = garden.plot(index);
+            if (plot.isEmpty()) {
                 continue;
             }
-            plot.clear();
+            HerbType herb = plot.clear();
             items.give(player, HerbItemKind.HERB, herb, config.harvestYield(herb));
             xp += config.xpReward(herb);
             harvested++;
@@ -79,7 +115,7 @@ public final class GardenService {
     }
 
     public GardenResult fertilize(Player player, HerbioProfile profile, int plotIndex) {
-        Plot plot = profile.garden().plot(plotIndex);
+        Plot plot = profile.garden(profile.selectedHerb()).plot(plotIndex);
         HerbType herb = plot.herb();
         if (herb == null || !plot.isGrowing()) {
             return GardenResult.failure(ActionOutcome.PLOT_EMPTY);
@@ -100,8 +136,9 @@ public final class GardenService {
         if (!herb.isUnlockedAt(profile.levelIndex())) {
             return GardenResult.failure(ActionOutcome.HERB_LOCKED);
         }
+        Garden garden = profile.garden(herb);
         Inventory inventory = player.getInventory();
-        int empty = countEmptyPlots(profile);
+        int empty = countPlantablePlots(profile, herb);
         if (empty == 0) {
             return GardenResult.success(0);
         }
@@ -109,12 +146,11 @@ public final class GardenService {
         if (seeds == 0) {
             return GardenResult.failure(ActionOutcome.NO_SEEDS);
         }
-        int planned = Math.min(empty, seeds);
-        int taken = items.remove(inventory, HerbItemKind.SEED, herb, planned);
+        int taken = items.remove(inventory, HerbItemKind.SEED, herb, Math.min(empty, seeds));
         int planted = 0;
         for (int index = 0; index < Garden.SIZE && planted < taken; index++) {
-            Plot plot = profile.garden().plot(index);
-            if (plot.isEmpty()) {
+            Plot plot = garden.plot(index);
+            if (plot.isEmpty() && isPlotUnlocked(profile, herb, index)) {
                 plot.plant(herb, growthMillis(player, herb));
                 planted++;
             }
@@ -124,10 +160,11 @@ public final class GardenService {
     }
 
     public GardenResult harvestAll(Player player, HerbioProfile profile) {
+        Garden garden = profile.garden(profile.selectedHerb());
         int harvested = 0;
         long xp = 0L;
         for (int index = 0; index < Garden.SIZE; index++) {
-            Plot plot = profile.garden().plot(index);
+            Plot plot = garden.plot(index);
             if (!plot.isReady()) {
                 continue;
             }
@@ -145,12 +182,13 @@ public final class GardenService {
     }
 
     public GardenResult fertilizeAll(Player player, HerbioProfile profile) {
+        Garden garden = profile.garden(profile.selectedHerb());
         Inventory inventory = player.getInventory();
         int fertilized = 0;
         boolean missingFertilizer = false;
         boolean limitReached = false;
         for (int index = 0; index < Garden.SIZE; index++) {
-            Plot plot = profile.garden().plot(index);
+            Plot plot = garden.plot(index);
             HerbType herb = plot.herb();
             if (herb == null || !plot.isGrowing()) {
                 continue;
@@ -181,10 +219,11 @@ public final class GardenService {
         return config.growthMillis(herb, player.hasPermission(Permissions.VIP));
     }
 
-    private int countEmptyPlots(HerbioProfile profile) {
+    private int countPlantablePlots(HerbioProfile profile, HerbType field) {
+        Garden garden = profile.garden(field);
         int empty = 0;
         for (int index = 0; index < Garden.SIZE; index++) {
-            if (profile.garden().plot(index).isEmpty()) {
+            if (garden.plot(index).isEmpty() && isPlotUnlocked(profile, field, index)) {
                 empty++;
             }
         }

@@ -2,6 +2,7 @@ package dev.herbio.gui;
 
 import dev.herbio.config.HerbioConfig;
 import dev.herbio.config.Messages;
+import dev.herbio.economy.VaultEconomy;
 import dev.herbio.garden.ActionOutcome;
 import dev.herbio.garden.GardenResult;
 import dev.herbio.garden.GardenService;
@@ -12,6 +13,7 @@ import dev.herbio.player.PlayerManager;
 import dev.herbio.util.Permissions;
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
+import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.ClickType;
 import org.bukkit.inventory.ItemStack;
@@ -31,32 +33,43 @@ public final class GuiManager {
     private final PlayerManager players;
     private final GardenService gardens;
     private final HerbItems items;
+    private final VaultEconomy economy;
     private final Map<UUID, HerbGui> openGuis = new ConcurrentHashMap<>();
 
+    /** A repeated click must not repeat its complaint; same message, same player, this often at most. */
+    private static final long MESSAGE_REPEAT_MILLIS = 5_000L;
+
+    private final Map<UUID, LastMessage> lastMessages = new ConcurrentHashMap<>();
+
     private @Nullable ScheduledTask refreshTask;
+
+    private record LastMessage(String key, long sentAtMillis) {
+    }
 
     public GuiManager(Plugin plugin,
                       HerbioConfig config,
                       Messages messages,
                       PlayerManager players,
                       GardenService gardens,
-                      HerbItems items) {
+                      HerbItems items,
+                      VaultEconomy economy) {
         this.plugin = plugin;
         this.config = config;
         this.messages = messages;
         this.players = players;
         this.gardens = gardens;
         this.items = items;
+        this.economy = economy;
     }
 
     public void open(Player player) {
         HerbioProfile profile = players.get(player.getUniqueId());
         if (profile == null) {
-            messages.send(player, "profile-loading");
+            notifyOnce(player, "profile-loading");
             players.load(player.getUniqueId());
             return;
         }
-        HerbGui gui = new HerbGui(config, player, profile);
+        HerbGui gui = new HerbGui(config, gardens, economy, player, profile);
         openGuis.put(player.getUniqueId(), gui);
         gui.open();
     }
@@ -65,7 +78,7 @@ public final class GuiManager {
     public void openScroll(Player player) {
         HerbioProfile profile = players.get(player.getUniqueId());
         if (profile == null) {
-            messages.send(player, "profile-loading");
+            notifyOnce(player, "profile-loading");
             players.load(player.getUniqueId());
             return;
         }
@@ -89,31 +102,71 @@ public final class GuiManager {
         }
         ItemStack permit = player.getInventory().getItemInMainHand();
         if (!items.isScroll(permit)) {
-            messages.send(player, "scroll-missing");
+            notifyOnce(player, "scroll-missing");
             player.closeInventory();
             return;
         }
         GardenResult result = gardens.harvestInstant(player, profile, herb);
         if (result.count() == 0) {
-            messages.send(player, "nothing-to-harvest");
+            notifyOnce(player, "nothing-to-harvest");
             player.closeInventory();
             return;
         }
         permit.setAmount(permit.getAmount() - 1);
-        messages.send(player, "scroll-used",
+        notifyOnce(player, "scroll-used",
                 Placeholder.unparsed("amount", Integer.toString(result.count())),
                 Placeholder.unparsed("xp", Long.toString(result.xp())),
                 Placeholder.parsed("herb", herb.coloredName()));
         if (result.levelsGained() > 0) {
-            messages.send(player, "level-up", Placeholder.unparsed("level", profile.levelDisplay()));
+            notifyOnce(player, "level-up", Placeholder.unparsed("level", profile.levelDisplay()));
         }
         // Reopen the garden on the picked herb so the player can replant straight away.
         profile.selectHerb(herb);
         player.getScheduler().run(plugin, task -> open(player), null);
     }
 
+    void handleConfirmClick(ConfirmGui gui, int slot) {
+        Player player = gui.player();
+        if (slot == ConfirmGui.CANCEL_SLOT) {
+            player.getScheduler().run(plugin, task -> open(player), null);
+            return;
+        }
+        if (slot != ConfirmGui.CONFIRM_SLOT) {
+            return;
+        }
+        HerbioProfile profile = gui.profile();
+        double price = config.darkPlotPrice();
+        if (!economy.isAvailable()) {
+            notifyOnce(player, "economy-missing");
+            player.closeInventory();
+            return;
+        }
+        if (!profile.isDarkPlotBought(gui.plotIndex()) && !economy.withdraw(player, price)) {
+            notifyOnce(player, "not-enough-money", Placeholder.unparsed("price", economy.format(price)));
+            player.closeInventory();
+            return;
+        }
+        profile.buyDarkPlot(gui.plotIndex());
+        notifyOnce(player, "plot-bought",
+                Placeholder.unparsed("index", Integer.toString(gui.plotIndex() + 1)),
+                Placeholder.unparsed("price", economy.format(price)));
+        player.getScheduler().run(plugin, task -> open(player), null);
+    }
+
     void handleClose(HerbGui gui) {
         openGuis.remove(gui.player().getUniqueId(), gui);
+        lastMessages.remove(gui.player().getUniqueId());
+    }
+
+    /** GUI feedback, dropping the same message when the player keeps clicking the same button. */
+    private void notifyOnce(Player player, String key, TagResolver... resolvers) {
+        long now = System.currentTimeMillis();
+        LastMessage last = lastMessages.get(player.getUniqueId());
+        if (last != null && last.key().equals(key) && now - last.sentAtMillis() < MESSAGE_REPEAT_MILLIS) {
+            return;
+        }
+        lastMessages.put(player.getUniqueId(), new LastMessage(key, now));
+        messages.send(player, key, resolvers);
     }
 
     void handleClick(HerbGui gui, int slot, ClickType click) {
@@ -131,7 +184,7 @@ public final class GuiManager {
         }
         if (slot == GuiLayout.BULK_HOE_SLOT) {
             if (!player.hasPermission(Permissions.VIP)) {
-                messages.send(player, "no-permission");
+                notifyOnce(player, "no-permission");
                 return;
             }
             if (click.isRightClick()) {
@@ -146,33 +199,38 @@ public final class GuiManager {
         if (plotIndex < 0) {
             return;
         }
-        if (profile.garden().plot(plotIndex).isEmpty()) {
+        HerbType field = profile.selectedHerb();
+        if (!gardens.isPlotUnlocked(profile, field, plotIndex)) {
+            if (field == HerbType.DARK) {
+                ConfirmGui confirm = new ConfirmGui(config, economy, player, profile, plotIndex);
+                player.getScheduler().run(plugin, task -> confirm.open(), null);
+            } else {
+                notifyOnce(player, "plot-rank-locked", Placeholder.unparsed("level",
+                        dev.herbio.herb.LevelScale.display(gardens.rankUnlockLevelIndex(field, plotIndex))));
+            }
+            return;
+        }
+        if (profile.garden(profile.selectedHerb()).plot(plotIndex).isEmpty()) {
             report(gui, gardens.plant(player, profile, plotIndex), null, null);
-        } else if (profile.garden().plot(plotIndex).isReady()) {
+        } else if (profile.garden(profile.selectedHerb()).plot(plotIndex).isReady()) {
             report(gui, gardens.harvest(player, profile, plotIndex), "harvested", null);
         } else if (click.isRightClick()) {
             report(gui, gardens.fertilize(player, profile, plotIndex), null, null);
         } else {
-            messages.send(player, "plot-not-ready");
+            notifyOnce(player, "plot-not-ready");
         }
     }
 
     private void selectHerb(HerbGui gui, HerbType herb) {
         Player player = gui.player();
         HerbioProfile profile = gui.profile();
-        if (!herb.isUnlockedAt(profile.levelIndex())) {
-            messages.send(player, "herb-locked",
-                    Placeholder.parsed("herb", herb.coloredName()),
-                    Placeholder.unparsed("level", dev.herbio.herb.LevelScale.display(herb.minLevelIndex())));
-            return;
-        }
-        if (profile.selectedHerb() == herb) {
+        // Silent on purpose: the button lore already shows the lock and the current pick.
+        if (!herb.isUnlockedAt(profile.levelIndex()) || profile.selectedHerb() == herb) {
             return;
         }
         profile.selectHerb(herb);
-        messages.send(player, "selected", Placeholder.parsed("herb", herb.coloredName()));
         // The herb name is part of the inventory title, so the view has to be rebuilt.
-        HerbGui replacement = new HerbGui(config, player, profile);
+        HerbGui replacement = new HerbGui(config, gardens, economy, player, profile);
         openGuis.put(player.getUniqueId(), replacement);
         player.getScheduler().run(plugin, task -> replacement.open(), null);
     }
@@ -187,17 +245,17 @@ public final class GuiManager {
         Player player = gui.player();
         if (result.isSuccess()) {
             if (successKey != null) {
-                messages.send(player, successKey,
+                notifyOnce(player, successKey,
                         Placeholder.unparsed("amount", Integer.toString(result.count())),
                         Placeholder.unparsed("xp", Long.toString(result.xp())));
             }
             if (result.levelsGained() > 0) {
-                messages.send(player, "level-up", Placeholder.unparsed("level", profileLevel(gui)));
+                notifyOnce(player, "level-up", Placeholder.unparsed("level", profileLevel(gui)));
                 gui.renderAll();
             }
         } else if (result.count() == 0 && result.outcome() == ActionOutcome.SUCCESS) {
             if (emptyKey != null) {
-                messages.send(player, emptyKey);
+                notifyOnce(player, emptyKey);
             }
         } else {
             sendFailure(gui, result.outcome(), emptyKey);
@@ -210,12 +268,12 @@ public final class GuiManager {
         String key = outcome.messageKey();
         if (key == null) {
             if (emptyKey != null) {
-                messages.send(player, emptyKey);
+                notifyOnce(player, emptyKey);
             }
             return;
         }
         HerbType herb = gui.profile().selectedHerb();
-        messages.send(player, key,
+        notifyOnce(player, key,
                 Placeholder.parsed("herb", herb.coloredName()),
                 Placeholder.unparsed("level", dev.herbio.herb.LevelScale.display(herb.minLevelIndex())));
     }
@@ -234,6 +292,7 @@ public final class GuiManager {
             Player player = gui.player();
             if (!player.isOnline()) {
                 openGuis.remove(player.getUniqueId(), gui);
+                lastMessages.remove(player.getUniqueId());
                 continue;
             }
             // Inventory contents must be touched on the region thread owning the player.
@@ -247,5 +306,6 @@ public final class GuiManager {
             refreshTask = null;
         }
         openGuis.clear();
+        lastMessages.clear();
     }
 }

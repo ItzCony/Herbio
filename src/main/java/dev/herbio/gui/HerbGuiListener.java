@@ -20,6 +20,13 @@ public final class HerbGuiListener implements Listener {
 
     @EventHandler
     public void onClick(InventoryClickEvent event) {
+        if (event.getInventory().getHolder() instanceof ConfirmGui confirm) {
+            event.setCancelled(true);
+            if (event.getWhoClicked() instanceof Player && event.getClickedInventory() == event.getInventory()) {
+                guis.handleConfirmClick(confirm, event.getRawSlot());
+            }
+            return;
+        }
         if (event.getInventory().getHolder() instanceof ScrollGui scroll) {
             event.setCancelled(true);
             if (event.getWhoClicked() instanceof Player && event.getClickedInventory() == event.getInventory()) {
@@ -41,7 +48,9 @@ public final class HerbGuiListener implements Listener {
 
     @EventHandler
     public void onDrag(InventoryDragEvent event) {
-        if (guiOf(event.getInventory()) != null || event.getInventory().getHolder() instanceof ScrollGui) {
+        if (guiOf(event.getInventory()) != null
+                || event.getInventory().getHolder() instanceof ScrollGui
+                || event.getInventory().getHolder() instanceof ConfirmGui) {
             event.setCancelled(true);
         }
     }

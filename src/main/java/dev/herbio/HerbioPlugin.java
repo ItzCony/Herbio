@@ -3,6 +3,7 @@ package dev.herbio;
 import dev.herbio.command.HerbCommand;
 import dev.herbio.config.HerbioConfig;
 import dev.herbio.config.Messages;
+import dev.herbio.economy.VaultEconomy;
 import dev.herbio.garden.GardenService;
 import dev.herbio.gui.GuiManager;
 import dev.herbio.gui.HerbGuiListener;
@@ -64,7 +65,7 @@ public final class HerbioPlugin extends JavaPlugin {
         HerbItems items = new HerbItems(this);
         this.players = new PlayerManager(this, config, repository);
         GardenService gardens = new GardenService(config, items);
-        this.guis = new GuiManager(this, config, messages, players, gardens, items);
+        this.guis = new GuiManager(this, config, messages, players, gardens, items, new VaultEconomy(getServer()));
 
         getServer().getPluginManager().registerEvents(new PlayerSessionListener(players), this);
         getServer().getPluginManager().registerEvents(new HerbGuiListener(guis), this);

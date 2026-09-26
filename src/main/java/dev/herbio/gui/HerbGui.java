@@ -1,7 +1,9 @@
 package dev.herbio.gui;
 
 import dev.herbio.config.HerbioConfig;
+import dev.herbio.economy.VaultEconomy;
 import dev.herbio.garden.Garden;
+import dev.herbio.garden.GardenService;
 import dev.herbio.garden.Plot;
 import dev.herbio.herb.HerbType;
 import dev.herbio.herb.LevelScale;
@@ -32,15 +34,20 @@ public final class HerbGui {
     private static final Material BORDER = Material.GRAY_STAINED_GLASS_PANE;
     private static final Material HOE = Material.WOODEN_HOE;
     private static final Material LEVEL_BOOK = Material.BOOK;
+    private static final Material LOCKED_PLOT = Material.ORANGE_STAINED_GLASS_PANE;
     private static final int PROGRESS_BAR_WIDTH = 20;
 
     private final HerbioConfig config;
+    private final GardenService gardens;
+    private final VaultEconomy economy;
     private final Player player;
     private final HerbioProfile profile;
     private final Inventory inventory;
 
-    HerbGui(HerbioConfig config, Player player, HerbioProfile profile) {
+    HerbGui(HerbioConfig config, GardenService gardens, VaultEconomy economy, Player player, HerbioProfile profile) {
         this.config = config;
+        this.gardens = gardens;
+        this.economy = economy;
         this.player = player;
         this.profile = profile;
         HerbGuiHolder holder = new HerbGuiHolder(this);
@@ -125,9 +132,12 @@ public final class HerbGui {
 
     /** Plot tiles and the progress book; re-rendered on every refresh tick. */
     public void renderPlots() {
-        Garden garden = profile.garden();
+        HerbType field = profile.selectedHerb();
+        Garden garden = profile.garden(field);
         for (int index = 0; index < Garden.SIZE; index++) {
-            inventory.setItem(GuiLayout.plotSlot(index), plotItem(garden.plot(index)));
+            inventory.setItem(GuiLayout.plotSlot(index), gardens.isPlotUnlocked(profile, field, index)
+                    ? plotItem(garden.plot(index))
+                    : lockedPlotItem(field, index));
         }
         inventory.setItem(GuiLayout.LEVEL_BOOK_SLOT, levelItem());
     }
@@ -171,6 +181,20 @@ public final class HerbGui {
     public void renderAll() {
         renderStatic();
         renderPlots();
+    }
+
+    private ItemStack lockedPlotItem(HerbType field, int plotIndex) {
+        if (field == HerbType.DARK) {
+            return item(LOCKED_PLOT, Text.item("<red>Locked plot"),
+                    List.of(Text.item("<gray>Price: <white><price>",
+                                    Placeholder.unparsed("price", economy.format(config.darkPlotPrice()))),
+                            Text.item("<gray>Click to unlock it.")));
+        }
+        return item(LOCKED_PLOT, Text.item("<red>Locked plot"),
+                List.of(Text.item("<gray>Opens at herbalism rank <white><level>",
+                                Placeholder.unparsed("level",
+                                        LevelScale.display(gardens.rankUnlockLevelIndex(field, plotIndex)))),
+                        Text.item("<dark_gray>Keep levelling to open it.")));
     }
 
     private ItemStack plotItem(Plot plot) {
